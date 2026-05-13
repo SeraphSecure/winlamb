@@ -91,6 +91,7 @@ public:
 			throw std::logic_error("A file stream is already configured.");
 		}
 		this->_toFile.open_or_create(path);
+		this->_toFile.set_new_size(0);
 		return *this;
 	}
 
