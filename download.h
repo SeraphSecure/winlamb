@@ -32,11 +32,9 @@ private:
 	std::function<void()> _startCallback, _progressCallback;
 	std::function<void(BYTE*, DWORD)> _dataCallback;
 	file _toFile;
-	std::vector<BYTE> _toFileBuffer;
+	std::vector<BYTE> _data;
 
 public:
-	std::vector<BYTE> data;
-
 	~download() {
 		this->abort();
 	}
@@ -108,9 +106,9 @@ public:
 		this->_init_handles();
 		this->_contact_server();
 		this->_parse_headers();
-		this->data.clear(); // prepare buffer to receive data
+		this->_data.clear(); // prepare buffer to receive data
 		if (this->_contentLength) { // server informed content length?
-			this->data.reserve(this->_contentLength);
+			this->_data.reserve(this->_contentLength);
 		}
 
 		if (this->_startCallback) this->_startCallback(); // run user callback
@@ -119,7 +117,7 @@ public:
 			for (;;) {
 				DWORD incomingBytes = this->_get_incoming_byte_count(); // chunk size about to come
 				if (!incomingBytes) break; // no more bytes remaining
-				this->_receive_bytes(incomingBytes); // chunk will be appended into this->data
+				this->_receive_bytes(incomingBytes); // chunk will be appended into this->_data
 				if (this->_progressCallback) this->_progressCallback();
 				if (!this->_hConnect && !this->_hRequest) break; // user called abort()
 			}
@@ -133,6 +131,16 @@ public:
 	DWORD get_status_code() const noexcept       { return this->_statusCode; }
 	size_t get_content_length() const noexcept   { return this->_contentLength; }
 	size_t get_total_downloaded() const noexcept { return this->_totalGot; }
+
+	const BYTE* get_data() const       { return this->get_data_vector().data(); }
+	const size_t get_data_size() const { return this->get_data_vector().size(); }
+	const std::vector<BYTE>& get_data_vector() const
+	{
+		if (this->_toFile.hfile()) {
+			throw std::logic_error("No data for download written to file");
+		}
+		return this->_data;
+	}
 
 	// If server informed content length, returns a value between 0 and 100.
 	float get_percent() const noexcept {
@@ -250,12 +258,12 @@ private:
 		void* pWriteTo = nullptr;
 		size_t beforeSize;
 		if (this->_toFile.hfile()) {
-			this->_toFileBuffer.resize(nBytesToRead); // make room
-			pWriteTo = static_cast<void*>(&this->_toFileBuffer[0]);
+			this->_data.resize(nBytesToRead); // make room
+			pWriteTo = static_cast<void*>(&this->_data[0]);
 		} else {
-			beforeSize = this->data.size();
-			this->data.resize(beforeSize + nBytesToRead); // make room
-			pWriteTo = static_cast<void*>(&this->data[beforeSize]);
+			beforeSize = this->_data.size();
+			this->_data.resize(beforeSize + nBytesToRead); // make room
+			pWriteTo = static_cast<void*>(&this->_data[beforeSize]);
 		}
 
 		DWORD readCount = 0;
@@ -273,7 +281,7 @@ private:
 		if (this->_toFile.hfile()) {
 			this->_toFile.write(static_cast<const BYTE*>(pWriteTo), readCount); // write to stream
 		} else {
-			this->data.resize(beforeSize + readCount); // resize buffer to whatever was read
+			this->_data.resize(beforeSize + readCount); // resize buffer to whatever was read
 		}
 	}
 };
